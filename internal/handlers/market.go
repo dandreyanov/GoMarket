@@ -96,3 +96,14 @@ func (p *ProductRoutes) UpdateProduct(c *gin.Context) {
 
 	c.JSON(http.StatusOK, product)
 }
+
+func (p *ProductRoutes) DeleteProduct(c *gin.Context) {
+	id := c.Param("id")
+
+	_, err := p.db.Exec("DELETE FROM products WHERE id = $1", id)
+	if err != nil {
+		c.JSON(http.StatusMultiStatus, gin.H{"error": err.Error()})
+	} else {
+		c.JSON(http.StatusOK, gin.H{"message": "product delete"})
+	}
+}
