@@ -66,3 +66,33 @@ func (p *ProductRoutes) GetProductById(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, product)
 }
+
+func (p *ProductRoutes) UpdateProduct(c *gin.Context) {
+	id := c.Param("id")
+
+	var product entity.Product
+
+	err := c.BindJSON(&product)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	_, errDb := p.db.Exec("UPDATE products SET name = $1, description = $2, price = $3, quantity = $4 WHERE id = $5", product.Name, product.Description, product.Price, product.Quantity, id)
+	if errDb != nil {
+		c.JSON(http.StatusMultiStatus, gin.H{"database error": errDb.Error()})
+		return
+	}
+
+	// Создаем новый запрос для чтения обновленных данных
+	row := p.db.QueryRow("SELECT * FROM products WHERE id = $1", id)
+
+	// Используем Scan для чтения обновленных данных
+	err = row.Scan(&product.ID, &product.Name, &product.Description, &product.Price, &product.Quantity)
+	if err != nil {
+		c.JSON(http.StatusMultiStatus, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, product)
+}
