@@ -1,10 +1,10 @@
 package handlers
 
 import (
+	"GoMarket/internal/entity"
 	"database/sql"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/spf13/viper/internal/entity"
 	"net/http"
 )
 
@@ -28,6 +28,7 @@ func (p *ProductRoutes) AddProduct(c *gin.Context) {
 	}
 	product.ID = uuid.New().String()
 	_, err = p.db.Exec("INSERT INTO products (id, name, description, price, quantity) VALUES ($1, $2, $3, $4, $5)", product.ID, product.Name, product.Description, product.Price, product.Quantity)
+	c.JSON(http.StatusCreated, product.ID)
 }
 
 func (p *ProductRoutes) GetAllProducts(c *gin.Context) {
@@ -78,20 +79,18 @@ func (p *ProductRoutes) UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	_, errDb := p.db.Exec("UPDATE products SET name = $1, description = $2, price = $3, quantity = $4 WHERE id = $5", product.Name, product.Description, product.Price, product.Quantity, id)
+	row, errDb := p.db.Query("UPDATE products SET name = $1, description = $2, price = $3, quantity = $4 WHERE id = $5 RETURNING *", product.Name, product.Description, product.Price, product.Quantity, id)
 	if errDb != nil {
 		c.JSON(http.StatusMultiStatus, gin.H{"database error": errDb.Error()})
 		return
 	}
 
-	// Создаем новый запрос для чтения обновленных данных
-	row := p.db.QueryRow("SELECT * FROM products WHERE id = $1", id)
-
-	// Используем Scan для чтения обновленных данных
-	err = row.Scan(&product.ID, &product.Name, &product.Description, &product.Price, &product.Quantity)
-	if err != nil {
-		c.JSON(http.StatusMultiStatus, gin.H{"error": err.Error()})
-		return
+	for row.Next() {
+		err = row.Scan(&product.ID, &product.Name, &product.Description, &product.Price, &product.Quantity)
+		if err != nil {
+			c.JSON(http.StatusMultiStatus, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, product)
