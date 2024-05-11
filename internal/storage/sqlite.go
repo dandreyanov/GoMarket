@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS products (
 	quantity INTEGER default 0);
 CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(36) PRIMARY KEY,
-    username VARCHAR(100) NOT NULL,
+    username VARCHAR(100) unique,
     password VARCHAR(100) NOT NULL,
     email VARCHAR(100));
 CREATE TABLE IF NOT EXISTS orders (
