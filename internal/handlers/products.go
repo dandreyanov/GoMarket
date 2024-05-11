@@ -79,9 +79,9 @@ func (p *ProductRoutes) UpdateProduct(c *gin.Context) {
 		return
 	}
 
-	row, errDb := p.db.Query("UPDATE products SET name = $1, description = $2, price = $3, quantity = $4 WHERE id = $5 RETURNING *", product.Name, product.Description, product.Price, product.Quantity, id)
-	if errDb != nil {
-		c.JSON(http.StatusMultiStatus, gin.H{"database error": errDb.Error()})
+	row, err := p.db.Query("UPDATE products SET name = $1, description = $2, price = $3, quantity = $4 WHERE id = $5 RETURNING *", product.Name, product.Description, product.Price, product.Quantity, id)
+	if err != nil {
+		c.JSON(http.StatusMultiStatus, gin.H{"database error": err.Error()})
 		return
 	}
 
