@@ -26,3 +26,10 @@ type ExtendedOrder struct {
 	Orders []Order `json:"orders"`
 	Total  int     `json:"total"`
 }
+
+type User struct {
+	ID       string `json:"id,omitempty"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	Email    string `json:"email"`
+}

@@ -24,9 +24,10 @@ func main() {
 
 	products := handlers.NewProductRoutes(db)
 	orders := handlers.NewOrderRoutes(db)
+	users := handlers.NewUserRoutes(db)
 	r := gin.Default()
 
-	endpoints.InitEndpoints(r, products, orders)
+	endpoints.InitEndpoints(r, products, orders, users)
 	err = r.Run(":8080")
 
 	if err != nil {
