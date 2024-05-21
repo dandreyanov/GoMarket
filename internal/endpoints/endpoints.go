@@ -6,15 +6,27 @@ import (
 )
 
 func InitEndpoints(r *gin.Engine, pr *handlers.ProductRoutes, or *handlers.OrderRoutes, ur *handlers.UserRoutes) {
-	r.POST("/product/add", pr.AddProduct)
-	r.POST("/product/update/:id", pr.UpdateProduct)
-	r.DELETE("/product/delete/:id", pr.DeleteProduct)
-	r.GET("/product/all", pr.GetAllProducts)
-	r.GET("/product/:id", pr.GetProductById)
+	productGroup := r.Group("/product")
+	productGroup.Use(ur.AuthMiddleware())
+	{
+		productGroup.POST("/add", pr.AddProduct)
+		productGroup.POST("/update/:id", pr.UpdateProduct)
+		productGroup.DELETE("/delete/:id", pr.DeleteProduct)
+		productGroup.GET("/all", pr.GetAllProducts)
+		productGroup.GET("/:id", pr.GetProductById)
+	}
 
-	r.POST("/order/add", or.MakeOrder)
-	r.GET("order/user/:id", or.GetUserOrders)
-	r.GET("order/product/:id", or.GetProductOrders)
+	orderGroup := r.Group("/order")
+	orderGroup.Use(ur.AuthMiddleware())
+	{
+		orderGroup.POST("/add", or.MakeOrder)
+		orderGroup.GET("/user/:id", or.GetUserOrders)
+		orderGroup.GET("/product/:id", or.GetProductOrders)
+	}
 
-	r.POST("/user/register", ur.RegisterUser)
+	userGroup := r.Group("/user")
+	{
+		userGroup.POST("/register", ur.RegisterUser)
+		userGroup.POST("/login", ur.LoginUser)
+	}
 }
