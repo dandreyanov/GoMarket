@@ -3,10 +3,10 @@ package handlers
 import (
 	"GoMarket/internal/entity"
 	"database/sql"
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -30,46 +30,93 @@ func (o *OrderRoutes) MakeOrder(c *gin.Context) {
 	}
 	order.ID = uuid.New().String()
 
-	stmt, err := o.db.Query("SELECT quantity, price FROM products WHERE id = $1", order.ProductID)
-	if err != nil {
-		panic(err)
-	}
-	defer func(stmt *sql.Rows) {
-		err := stmt.Close()
-		if err != nil {
+	var wg sync.WaitGroup
+	errChan := make(chan error, 1)
+	defer close(errChan)
 
-		}
-	}(stmt)
-
-	for stmt.Next() {
-		err = stmt.Scan(&quantity, &price)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		stmt, err := o.db.Query("SELECT quantity, price FROM products WHERE id = $1", order.ProductID)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			errChan <- err
 			return
 		}
+		defer stmt.Close()
+
+		if stmt.Next() {
+			err = stmt.Scan(&quantity, &price)
+			if err != nil {
+				errChan <- err
+				return
+			}
+		} else {
+			errChan <- sql.ErrNoRows
+			return
+		}
+	}()
+
+	wg.Wait()
+	select {
+	case err := <-errChan:
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	default:
 	}
 
 	if quantity < order.Quantity {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Not enough quantity"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Нет нужного количества товара"})
 		return
 	}
 
 	order.Price = price * order.Quantity
 
-	_, err = o.db.Exec("INSERT INTO orders (id, user_id, product_id, price, quantity, timestamp) VALUES ($1, $2, $3, $4, $5, $6)", order.ID, order.UserID, order.ProductID, order.Price, order.Quantity, time.Now())
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	// Горутин для вставки нового заказа
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err = o.db.Exec("INSERT INTO orders (id, user_id, product_id, price, quantity, timestamp) VALUES ($1, $2, $3, $4, $5, $6)", order.ID, order.UserID, order.ProductID, order.Price, order.Quantity, time.Now())
+		if err != nil {
+			errChan <- err
+			return
+		}
+	}()
+
+	wg.Wait()
+	select {
+	case err := <-errChan:
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	default:
 	}
 
 	newQuantity := quantity - order.Quantity
 
-	fmt.Println(newQuantity, order.ProductID)
-	_, err = o.db.Exec("UPDATE products SET quantity = $1 WHERE id = $2", newQuantity, order.ProductID)
-	if err != nil {
-		c.JSON(http.StatusMultiStatus, gin.H{"database error": err.Error()})
-		return
+	// Горутин для обновления количества продукта
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, err = o.db.Exec("UPDATE products SET quantity = $1 WHERE id = $2", newQuantity, order.ProductID)
+		if err != nil {
+			errChan <- err
+			return
+		}
+	}()
+
+	wg.Wait()
+	select {
+	case err := <-errChan:
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	default:
 	}
+
 	c.JSON(http.StatusCreated, order.ID)
 }
 
@@ -79,10 +126,17 @@ func (o *OrderRoutes) GetUserOrders(c *gin.Context) {
 	var orders entity.Order
 	var ordersResponse entity.ExtendedOrder
 
-	rows, _ := o.db.Query("SELECT * FROM orders WHERE user_id = $1", id)
+	rows, err := o.db.Query("SELECT * FROM orders WHERE user_id = $1", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
 	for rows.Next() {
 		err := rows.Scan(&orders.ID, &orders.UserID, &orders.ProductID, &orders.Price, &orders.Quantity, &orders.Timestamp)
 		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		ordersResponse.Orders = append(ordersResponse.Orders, orders)
@@ -97,10 +151,17 @@ func (o *OrderRoutes) GetProductOrders(c *gin.Context) {
 	var orders entity.Order
 	var ordersResponse entity.ExtendedOrder
 
-	rows, _ := o.db.Query("SELECT * FROM orders WHERE product_id = $1", id)
+	rows, err := o.db.Query("SELECT * FROM orders WHERE product_id = $1", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
 	for rows.Next() {
 		err := rows.Scan(&orders.ID, &orders.UserID, &orders.ProductID, &orders.Price, &orders.Quantity, &orders.Timestamp)
 		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		ordersResponse.Orders = append(ordersResponse.Orders, orders)
